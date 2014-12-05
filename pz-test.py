@@ -20,21 +20,20 @@ def parse_dates(x):
 def color_code(x):
     r = []
     for z in x:
-        c = "000000"
-        if z:
-            try:
-                if z > 0.0:
-                    c = "11111"
-            except:
-                pass
+        c = "#396285"
+        if z.strip() != '':
+            c = "#FF0000"
         r.append(c)
     return r
 
 output_file('data_tables.html', title='Data Tables')
 
 data = pd.read_csv(
-    'c:\\temp\\loans\\browseNotes_1-RETAIL.csv', parse_dates=True, index_col=False)
+    'c:\\temp\\loans\\browseNotes_1-RETAIL.csv', parse_dates=True, index_col=False, decimal='.')
 data['funded_perc'] = 100.0 * data['funded_amnt'] / data['loan_amnt']
+data['color_code'] = color_code(data['mths_since_last_delinq'])
+
+
 data['a'] = parse_dates(data['exp_d'])
 now = datetime.now()
 data['b'] = [
@@ -42,27 +41,48 @@ data['b'] = [
 data['RiskInt'] = 100 * ((data['effective_int_rate'] / 100 + 1)
                          * (1 - data['exp_default_rate'] / 100) - 1)
 data['pct_tl_nvr_dlq'] = (.01 * data['pct_tl_nvr_dlq']) ** 4
-# data['bc_util'] = data.bc_util.map(float)
+x = data['mths_since_last_delinq']
+print(x)
+
+#data = data[data['grade'] > 'C']
+data = data[data['pub_rec'] == 0]
+data = data[data['tax_liens'] == 0]
+data = data[data['delinq_2yrs'] == 0]
+data = data[data['tot_coll_amt'] == 0]
+data = data[data['pub_rec_bankruptcies'] == 0]
+data = data[data['chargeoff_within_12_mths'] == 0]
+data = data[data['collections_12_mths_ex_med'] == 0]
+data = data[data['inq_last_6mths'] < 2]
+data = data[data['acc_open_past_24mths'] < 6]
+data = data[data['num_accts_ever_120_pd'] == 0]
+data = data[data['annual_inc'] > 40000]
+data = data[data['revol_util'] < 85]
+data = data[data['purpose'] != 'Business']
+data = data[data['purpose'] != 'Medical expenses']
+data = data[data['num_sats'] == data['open_acc']]
+data = data[data['bc_util'].notnull()]
+data = data[data['num_tl_120dpd_2m'] == '0']
+data = data[data['num_tl_30dpd'] == 0]
+data = data[data['num_tl_90g_dpd_24m'] == 0]
 
 '''
-dqy += "WHERE (bc_util*1 < 85) "
-dqy += "AND (revol_util*1 < 85) "
-dqy += "AND (num_accts_ever_120_pd='0') "
-dqy += "AND (annual_inc -40000 >0) "
-dqy += "AND (grade>'C') "
-dqy += "AND (purpose<>'Business' And purpose<>'Medical expenses') "
-dqy += "AND (delinq_2yrs='0') "
-dqy += "AND (acc_open_past_24mths*1 < 6) "
-dqy += "AND (inq_last_6mths<'2') "
-dqy += "AND (tot_coll_amt='0') "
-dqy += "AND (num_tl_120dpd_2m='0') "
-dqy += "AND (tax_liens='0') "
-dqy += "AND (pub_rec='0') "
-dqy += "AND (collections_12_mths_ex_med='0') "
-dqy += "AND (chargeoff_within_12_mths='0') "
-dqy += "AND (pub_rec_bankruptcies='0') "
+#dqy += "WHERE (bc_util*1 < 85) "
+    dqy += "AND (revol_util*1 < 85) "
+    dqy += "AND (num_accts_ever_120_pd='0') "
+    dqy += "AND (annual_inc -40000 >0) "
+    dqy += "AND (grade>'C') "
+    dqy += "AND (purpose<>'Business' And purpose<>'Medical expenses') "
+    dqy += "AND (delinq_2yrs='0') "
+    dqy += "AND (acc_open_past_24mths*1 < 6) "
+    dqy += "AND (inq_last_6mths<'2') "
+    dqy += "AND (tot_coll_amt='0') "
+    dqy += "AND (num_tl_120dpd_2m='0') "
+    dqy += "AND (tax_liens='0') "
+    dqy += "AND (pub_rec='0') "
+    dqy += "AND (collections_12_mths_ex_med='0') "
+    dqy += "AND (chargeoff_within_12_mths='0') "
+    dqy += "AND (pub_rec_bankruptcies='0') "
 '''
-# print(data['filter'])
 source = ColumnDataSource(data)
 columns = [
     TableColumn(field="list_d", title="list_d"),
@@ -71,6 +91,8 @@ columns = [
     TableColumn(field="funded_amnt", title="funded_amnt",
                 formatter=NumberFormatter(format="0.0")),
     TableColumn(field="int_rate", title="int_rate",
+                formatter=NumberFormatter(format="0.00")),
+    TableColumn(field="RiskInt", title="RiskInt",
                 formatter=NumberFormatter(format="0.00")),
     TableColumn(field="sub_grade", title="sub_grade"),
     TableColumn(field="emp_title", title="emp_title"),
@@ -83,6 +105,7 @@ columns = [
     TableColumn(field="mo_sin_rcnt_tl", title="mo_sin_rcnt_tl"),
     TableColumn(field="bc_util", title="bc_util"),
     TableColumn(field="dti", title="dti"),
+    TableColumn(field="color_code", title="color_code"),
 ]
 data_table = DataTable(source=source, columns=columns)
 xdr = DataRange1d(sources=[source.columns("b")])
@@ -94,10 +117,8 @@ plot.below.append(xaxis)
 yaxis = LinearAxis(plot=plot)
 ygrid = Grid(plot=plot, dimension=1, ticker=yaxis.ticker)
 plot.left.append(yaxis)
-# dat_glyph = Circle(x="b", y="funded_perc",
-# fill_color="#396285", size=8, fill_alpha=1, line_alpha=0.0)
 dat_glyph = Circle(x="b", y="funded_perc",
-                   fill_color="#396285", size='RiskInt', fill_alpha='pct_tl_nvr_dlq', line_alpha='dti')
+                   fill_color="color_code", size='RiskInt', fill_alpha='pct_tl_nvr_dlq', line_alpha='dti')
 dat = GlyphRenderer(data_source=source, glyph=dat_glyph)
 
 tooltips = [
@@ -117,12 +138,7 @@ tooltips = [
     ("dti", "@dti"),
 ]
 '''
-num_sats    open_acc
-num_tl_90g_dpd_24m
-num_tl_30dpd
 total_bc_limit    bc_open_to_buy    total_rev_hi_lim    revol_bal    total_il_high_credit_limit    tot_hi_cred_lim    total_bal_ex_mort    tot_cur_bal    avg_cur_bal
-mths_since_recent_revol_delinq
-mths_since_recent_bc_dlq
 + mo_sin_rcnt_tl
 + mths_since_last_delinq
 ++ pct_tl_nvr_dlq
